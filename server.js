@@ -1,111 +1,86 @@
 const express = require("express");
 const sqlite3 = require("sqlite3").verbose();
-const bcrypt = require("bcrypt");
 const cors = require("cors");
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: "10mb" }));
-app.use(cors());
+/* 🔥 CORS CONFIGURADO */
+app.use(cors({
+  origin: [
+    "https://somos902.github.io"
+  ],
+  methods: ["GET", "POST"],
+  credentials: false
+}));
 
-const db = new sqlite3.Database("./database.db", (err) => {
-  if (err) {
-    console.error("Error al conectar a la base de datos:", err.message);
-  } else {
-    console.log("Base de datos conectada correctamente");
-  }
-});
+app.use(express.json());
+
+/* 🔥 BASE DE DATOS */
+const db = new sqlite3.Database("./database.db");
 
 db.run(`
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  usuario TEXT UNIQUE,
-  correo TEXT UNIQUE,
-  password TEXT,
-  foto TEXT
+  username TEXT,
+  email TEXT UNIQUE,
+  password TEXT
 )
 `);
 
-// ==========================
-// REGISTRO
-// ==========================
-app.post("/register", async (req, res) => {
-  try {
-    const { usuario, correo, password, foto } = req.body;
+/* 🔥 SIGNUP */
+app.post("/signup", (req, res) => {
+  const { username, email, password } = req.body;
 
-    if (!usuario || !correo || !password) {
-      return res.status(400).json({ message: "Campos incompletos" });
-    }
-
-    const hash = await bcrypt.hash(password, 10);
-
-    db.run(
-      "INSERT INTO users (usuario, correo, password, foto) VALUES (?, ?, ?, ?)",
-      [usuario, correo, hash, foto || null],
-      function (err) {
-        if (err) {
-          return res.status(400).json({
-            message: "Usuario o correo ya existe"
-          });
-        }
-
-        res.json({ message: "Cuenta creada correctamente" });
-      }
-    );
-  } catch (error) {
-    res.status(500).json({ message: "Error del servidor" });
+  if (!username || !email || !password) {
+    return res.status(400).json({ message: "Faltan datos" });
   }
+
+  db.run(
+    "INSERT INTO users (username, email, password) VALUES (?, ?, ?)",
+    [username, email, password],
+    function (err) {
+      if (err) {
+        return res.status(400).json({ message: "Correo ya registrado" });
+      }
+
+      res.json({ message: "Cuenta creada correctamente" });
+    }
+  );
 });
 
-// ==========================
-// LOGIN
-// ==========================
+/* 🔥 LOGIN */
 app.post("/login", (req, res) => {
   const { login, password } = req.body;
 
-  if (!login || !password) {
-    return res.status(400).json({ message: "Campos incompletos" });
-  }
-
   db.get(
-    "SELECT * FROM users WHERE correo = ? OR usuario = ?",
-    [login, login],
-    async (err, user) => {
+    "SELECT * FROM users WHERE (email = ? OR username = ?) AND password = ?",
+    [login, login, password],
+    (err, row) => {
       if (err) {
         return res.status(500).json({ message: "Error del servidor" });
       }
 
-      if (!user) {
-        return res.status(400).json({ message: "Esta cuenta no existe." });
-      }
-
-      const valid = await bcrypt.compare(password, user.password);
-
-      if (!valid) {
-        return res.status(400).json({ message: "Esta cuenta no existe." });
+      if (!row) {
+        return res.status(401).json({ message: "Cuenta no encontrada" });
       }
 
       res.json({
-        usuario: user.usuario,
-        correo: user.correo,
-        foto: user.foto
+        message: "Login exitoso",
+        user: {
+          id: row.id,
+          username: row.username,
+          email: row.email
+        }
       });
     }
   );
 });
 
-// ==========================
-// RUTA TEST
-// ==========================
 app.get("/", (req, res) => {
-  res.send("Servidor funcionando correctamente 🚀");
+  res.send("Servidor funcionando 🚀");
 });
 
-// ==========================
-// SERVIDOR
-// ==========================
-const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, () => {
-  console.log(`Servidor activo en puerto ${PORT}`);
+  console.log("Servidor activo en puerto " + PORT);
 });
