@@ -5,20 +5,17 @@ const cors = require("cors");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-/* 🔥 CORS CONFIGURADO */
 app.use(cors({
-  origin: [
-    "https://somos902.github.io"
-  ],
+  origin: ["https://somos902.github.io"],
   methods: ["GET", "POST"],
   credentials: false
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
-/* 🔥 BASE DE DATOS */
 const db = new sqlite3.Database("./database.db");
 
+/* 🔥 CREAR TABLA SI NO EXISTE */
 db.run(`
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -28,17 +25,34 @@ CREATE TABLE IF NOT EXISTS users (
 )
 `);
 
+/* 🔥 AGREGAR COLUMNA FOTO SI NO EXISTE */
+db.all("PRAGMA table_info(users);", (err, columns) => {
+  if (err) return console.log(err);
+
+  const hasFoto = columns.some(col => col.name === "foto");
+
+  if (!hasFoto) {
+    db.run("ALTER TABLE users ADD COLUMN foto TEXT", err => {
+      if (err) {
+        console.log("Columna foto ya existe o error:", err.message);
+      } else {
+        console.log("Columna foto agregada correctamente");
+      }
+    });
+  }
+});
+
 /* 🔥 SIGNUP */
 app.post("/signup", (req, res) => {
-  const { username, email, password } = req.body;
+  const { username, email, password, foto } = req.body;
 
   if (!username || !email || !password) {
     return res.status(400).json({ message: "Faltan datos" });
   }
 
   db.run(
-    "INSERT INTO users (username, email, password) VALUES (?, ?, ?)",
-    [username, email, password],
+    "INSERT INTO users (username, email, password, foto) VALUES (?, ?, ?, ?)",
+    [username, email, password, foto || null],
     function (err) {
       if (err) {
         return res.status(400).json({ message: "Correo ya registrado" });
@@ -70,7 +84,8 @@ app.post("/login", (req, res) => {
         user: {
           id: row.id,
           username: row.username,
-          email: row.email
+          email: row.email,
+          foto: row.foto
         }
       });
     }
